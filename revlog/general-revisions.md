@@ -4,10 +4,10 @@ tags: []
 
 # Revisions
 
-## Version 1.0 (Date)
+## Version 1.0 (03Jul2024)
 - Initial release
 
-## Version 1.1 (Date)
+## Version 1.1 (03JUL2024)
 ### Improvements
 
 Improved Logging: 
