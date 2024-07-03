@@ -1,14 +1,21 @@
 <#
 .SYNOPSIS
-    Performs various file and directory operations.
+    Performs various registry cleanup operations.
 
 .DESCRIPTION
     This PowerShell script provides the following functions:
 
-    1. Get-FileInfo: Retrieves information about a file or directory.
-    2. Copy-FileToDesktop: Copies a file to the user's desktop.
-    3. Remove-OldFiles: Deletes files that are older than a specified number of days.
-    4. Create-Directory: Creates a new directory with the specified name.
+    1. Log-Message: Logs messages with timestamps and stores them in a JSON log file.
+    2. Measure-ExecutionTime: Measures the execution time of a given script block and logs the results.
+    3. Backup-Registry: Backs up the registry to a file.
+    4. Scan-InvalidAppPaths: Scans for invalid application paths and returns a list of invalid entries.
+    5. Clean-InvalidAppPaths: Removes invalid application paths.
+    6. Scan-OrphanedComEntries: Scans for orphaned COM/ActiveX entries and returns a list of orphaned entries.
+    7. Clean-OrphanedComEntries: Removes orphaned COM/ActiveX entries.
+    8. Scan-InvalidFileTypes: Scans for invalid file type associations and returns a list of invalid entries.
+    9. Clean-InvalidFileTypes: Removes invalid file type associations.
+    10. Scan-BrokenUninstallEntries: Scans for broken uninstall entries and returns a list of broken entries.
+    11. Clean-BrokenUninstallEntries: Removes broken uninstall entries.
 
 .PARAMETER LogFilePath
     The path to the log file.
@@ -16,11 +23,8 @@
 .PARAMETER RegistryBackupPath
     The path to the registry backup file.
 
-.PARAMETER DaysOld
-    The number of days after which files should be considered old and deleted.
-
 .EXAMPLE
-    PS> .\RegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg' -DaysOld 30
+    PS> .\RegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'
     Runs the complete registry cleanup process, including scanning, logging, and cleaning of invalid entries.
 
 .NOTES
@@ -30,8 +34,7 @@
 
 param (
     [string]$LogFilePath = "RegistryCleanupLog.json",
-    [string]$RegistryBackupPath = "RegistryBackup.reg",
-    [int]$DaysOld = 30
+    [string]$RegistryBackupPath = "RegistryBackup.reg"
 )
 
 # Logger function to log messages with timestamps and store in JSON format
@@ -49,13 +52,13 @@ function Log-Message {
     }
 
     try {
-        $logFilePath = Join-Path -Path (Split-Path -Parent -Path $LogFilePath) -ChildPath (Split-Path -Leaf -Path $LogFilePath)
-        $logContent = [System.Collections.ArrayList]@()
-        if (Test-Path $logFilePath) {
-            $logContent.AddRange((Get-Content -Path $logFilePath | ConvertFrom-Json))
+        if (Test-Path $LogFilePath) {
+            $existingLogs = Get-Content -Path $LogFilePath | ConvertFrom-Json
+        } else {
+            $existingLogs = @()
         }
-        $logContent.Add($logEntry) | Out-Null
-        $logContent | ConvertTo-Json -Depth 10 | Set-Content -Path $logFilePath
+        $existingLogs += $logEntry
+        $existingLogs | ConvertTo-Json -Depth 10 | Set-Content -Path $LogFilePath
     } catch {
         Write-Host "Error writing to log file: $_"
     }
@@ -106,47 +109,146 @@ function Backup-Registry {
     }
 }
 
-# Function to get file or directory information
-function Get-FileInfo {
-    param (
-        [Parameter(Mandatory=$true)]
-        [string]$Path
-    )
-
-    Get-ChildItem -Path $Path
+# Function to scan for invalid application paths
+function Scan-InvalidAppPaths {
+    $invalidEntries = @()
+    $appPaths = Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+    foreach ($appPath in $appPaths) {
+        $exePath = (Get-ItemProperty -Path $appPath.PSPath).'(Default)'
+        if (-not (Test-Path $exePath)) {
+            $invalidEntries += $appPath.PSPath
+        }
+    }
+    if ($invalidEntries.Count -gt 0) {
+        Log-Message "Found invalid application paths:" -scanData @{ InvalidAppPaths = $invalidEntries }
+    }
+    return $invalidEntries
 }
 
-# Function to copy a file to the desktop
-function Copy-FileToDesktop {
+# Function to clean invalid application paths
+function Clean-InvalidAppPaths {
     param (
-        [Parameter(Mandatory=$true)]
-        [string]$SourcePath
+        [array]$invalidEntries
     )
-
-    $destPath = Join-Path -Path ([Environment]::GetFolderPath("Desktop")) -ChildPath (Split-Path -Leaf -Path $SourcePath)
-    Copy-Item -Path $SourcePath -Destination $destPath
+    if ($invalidEntries -and $invalidEntries.Count -gt 0) {
+        foreach ($entry in $invalidEntries) {
+            try {
+                Remove-Item -Path $entry -Force
+                Log-Message "Removed invalid entry: $entry"
+            } catch {
+                Log-Message "Error removing invalid entry: $entry - $_"
+            }
+        }
+    } else {  
+        Log-Message "No invalid application paths to clean."
+    }
 }
 
-# Function to remove old files
-function Remove-OldFiles {
-    param (
-        [Parameter(Mandatory=$true)]
-        [string]$Path,
-        [int]$DaysOld = 30
-    )
-
-    $olderThan = (Get-Date).AddDays(-$DaysOld)
-    Get-ChildItem -Path $Path -Exclude @((Get-ChildItem -Path $Path | Where-Object { $_.LastWriteTime -ge $olderThan }).Name) | Remove-Item
+# Function to scan for orphaned COM/ActiveX entries
+function Scan-OrphanedComEntries {
+    $orphanedEntries = @()
+    $comKeys = Get-ChildItem -Path "HKCR:\CLSID"
+    foreach ($key in $comKeys) {
+        $inprocServer = (Get-ItemProperty -Path $key.PSPath).InprocServer32
+        if ($inprocServer -and -not (Test-Path $inprocServer)) {
+            $orphanedEntries += $key.PSPath
+        }
+    }
+    if ($orphanedEntries.Count -gt 0) {
+        Log-Message "Found orphaned COM/ActiveX entries:" -scanData @{ OrphanedComEntries = $orphanedEntries }
+    }
+    return $orphanedEntries
 }
 
-# Function to create a new directory
-function Create-Directory {
+# Function to clean orphaned COM/ActiveX entries
+function Clean-OrphanedComEntries {
     param (
-        [Parameter(Mandatory=$true)]
-        [string]$Name
+        [array]$orphanedEntries
     )
+    if ($orphanedEntries -and $orphanedEntries.Count -gt 0) {
+        foreach ($entry in $orphanedEntries) {
+            try {
+                Remove-Item -Path $entry -Force
+                Log-Message "Removed orphaned COM/ActiveX entry: $entry"
+            } catch {
+                Log-Message "Error removing orphaned COM/ActiveX entry: $entry - $_"
+            }
+        }
+    } else {
+        Log-Message "No orphaned COM/ActiveX entries to clean."
+    }
+}
 
-    New-Item -ItemType Directory -Name $Name
+# Function to scan for invalid file type associations
+function Scan-InvalidFileTypes {
+    $invalidFileTypes = @()
+    $fileTypes = Get-ChildItem -Path "HKCR"
+    foreach ($fileType in $fileTypes) {
+        if ($fileType.PSIsContainer) {
+            $default = (Get-ItemProperty -Path $fileType.PSPath).'(Default)'
+            if ($default -and -not (Get-Item -Path "HKCR:\$default" -ErrorAction SilentlyContinue)) {
+                $invalidFileTypes += $fileType.PSPath
+            }
+        }
+    }
+    if ($invalidFileTypes.Count -gt 0) {
+        Log-Message "Found invalid file type associations:" -scanData @{ InvalidFileTypes = $invalidFileTypes }
+    }
+    return $invalidFileTypes
+}
+
+# Function to clean invalid file type associations
+function Clean-InvalidFileTypes {
+    param (
+        [array]$invalidFileTypes
+    )
+    if ($invalidFileTypes -and $invalidFileTypes.Count -gt 0) {
+        foreach ($entry in $invalidFileTypes) {
+            try {
+                Remove-Item -Path $entry -Force
+                Log-Message "Removed invalid file type association: $entry"
+            } catch {
+                Log-Message "Error removing invalid file type association: $entry - $_"
+            }
+        }
+    } else {
+        Log-Message "No invalid file type associations to clean."
+    }
+}
+
+# Function to scan for broken uninstall entries
+function Scan-BrokenUninstallEntries {
+    $brokenEntries = @()
+    $uninstallKeys = Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    foreach ($key in $uninstallKeys) {
+        $uninstallString = (Get-ItemProperty -Path $key.PSPath).UninstallString
+        if ($uninstallString -and -not (Test-Path $uninstallString)) {
+            $brokenEntries += $key.PSPath
+        }
+    }
+    if ($brokenEntries.Count -gt 0) {
+        Log-Message "Found broken uninstall entries:" -scanData @{ BrokenUninstallEntries = $brokenEntries }
+    }
+    return $brokenEntries
+}
+
+# Function to clean broken uninstall entries
+function Clean-BrokenUninstallEntries {
+    param (
+        [array]$brokenEntries
+    )
+    if ($brokenEntries -and $brokenEntries.Count -gt 0) {
+        foreach ($entry in $brokenEntries) {
+            try {
+                Remove-Item -Path $entry -Force
+                Log-Message "Removed broken uninstall entry: $entry"
+            } catch {
+                Log-Message "Error removing broken uninstall entry: $entry - $_"
+            }
+        }
+    } else {
+        Log-Message "No broken uninstall entries to clean."
+    }
 }
 
 # Main script
