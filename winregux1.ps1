@@ -20,8 +20,8 @@
     Runs the optimized registry cleanup process, including scanning, logging, and cleaning of invalid entries.
 
 .NOTES
-    Author: Assistant
-    Date: July 3, 2024
+    fused by dasLuftwafa
+    Date: 91Sept2024
 #>
 
 param (
