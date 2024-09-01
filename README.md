@@ -1,23 +1,73 @@
 # winRegwerks
-# Registry Cleanup PowerShell Script
+# Optimized Registry Cleanup PowerShell Script
 
-This PowerShell script provides a comprehensive registry cleanup solution. It scans for and removes various types of invalid registry entries, including:
+This PowerShell script provides an efficient and comprehensive registry cleanup solution. It scans for and removes various types of invalid registry entries in a single pass, improving performance and reducing system impact.
 
-1. **Invalid Application Paths**: Removes invalid entries in the `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths` registry key.
-2. **Orphaned COM/ActiveX Entries**: Removes orphaned entries in the `HKCR:\CLSID` registry key.
-3. **Invalid File Type Associations**: Removes invalid entries in the `HKCR` registry key.
-4. **Broken Uninstall Entries**: Removes broken entries in the `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall` registry key.
+## Features
 
-The script also includes the following features:
+1. **Unified Scanning and Cleaning**: Combines scanning and cleaning of multiple registry areas into a single efficient process:
+   - Invalid Application Paths
+   - Orphaned COM/ActiveX Entries
+   - Invalid File Type Associations
+   - Broken Uninstall Entries
 
-- **Logging**: All actions and errors are logged in a JSON file.
-- **Execution Time Measurement**: The execution time of each function is measured and logged.
-- **Registry Backup**: The registry is backed up before any cleaning operations are performed.
-- **User Confirmation**: The user is prompted to confirm the cleaning process before it is executed.
+2. **Enhanced Logging**: 
+   - In-memory logging with a single write operation at the end of the script execution.
+   - Detailed logging of all actions and errors in a JSON file for easy parsing and analysis.
+
+3. **Improved Performance**:
+   - Utilizes efficient PowerShell cmdlets and techniques to reduce execution time.
+   - Single-pass approach for scanning and cleaning reduces overall system impact.
+
+4. **Accurate Execution Time Measurement**: 
+   - Uses `System.Diagnostics.Stopwatch` for precise timing of each major function.
+
+5. **Robust Registry Backup**: 
+   - Creates a timestamped backup of the registry before any cleaning operations.
+
+6. **Simplified User Interaction**: 
+   - Single confirmation prompt before cleaning process begins.
+
+7. **Error Handling**: 
+   - Comprehensive error catching and logging for improved reliability and debugging.
+
+8. **Flexibility**: 
+   - Easily extendable structure for adding new types of registry cleanups in the future.
 
 ## Usage
 
-To use the script, run the `RegistryCleanup.ps1` file in PowerShell. You can optionally provide the paths for the log file and registry backup file as parameters.
+To use the script, run the `ImprovedRegistryCleanup.ps1` file in PowerShell with administrator privileges. You can optionally provide the paths for the log file and registry backup file as parameters.
 
 ```powershell
-.\RegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'
+.\ImprovedRegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'
+```
+
+If no parameters are provided, the script will use default file paths in the current directory.
+
+## Output
+
+The script provides real-time console output of its progress and writes a detailed JSON log file. The log file includes:
+- Timestamps for each operation
+- Detailed information about scanned and cleaned entries
+- Execution times for major functions
+- Any errors encountered during the process
+
+## Caution
+
+While this script is designed to be safe and includes a registry backup feature, it's always recommended to:
+1. Review the script before running it.
+2. Ensure you have a full system backup before performing any registry cleanup operations.
+3. Run the script in a test environment before using it on critical systems.
+
+## Requirements
+
+- Windows PowerShell 5.1 or later
+- Administrator privileges
+
+## Contributing
+
+Contributions to improve the script are welcome. Please ensure that any pull requests include appropriate comments and maintain the existing code structure and logging mechanisms.
+
+## License
+
+This script is released under the MIT License. See the LICENSE file for details.

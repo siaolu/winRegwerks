@@ -29,5 +29,40 @@ The Copy-FileToDesktop function now uses the Join-Path cmdlet to construct the d
 - Fixed issue(s):
     Item(1):Inefficient Logging: The Log-Message function appends the log entries to the existing log file every time it's called. This can lead to performance issues and unnecessary disk I/O, especially if the script is run frequently.
 
-- Resolved unecessary complexity / improved modularity
+- Resolved unnecessary complexity / improved modularity
 
+
+01Sept Revision Summary: 
+
+1. Efficiency:
+   - Combined separate scanning and cleaning functions into a single `Scan-and-Clean-Registry` function, reducing redundant registry traversals.
+   - Used more efficient PowerShell cmdlets like `ForEach-Object` instead of foreach loops.
+   - Implemented in-memory logging with a single write to file at the end, reducing I/O operations.
+
+2. Speed:
+   - Used `[System.Diagnostics.Stopwatch]` for more accurate timing measurements.
+   - Reduced the number of registry traversals by combining scans.
+
+3. Robustness:
+   - Added error handling and logging for all critical operations.
+   - Used `ErrorAction Stop` in Remove-Item to ensure errors are caught and logged.
+
+4. Readability:
+   - Added more comments explaining the purpose of each section.
+   - Reorganized the code structure for better flow and understanding.
+
+5. Flexibility:
+   - Used a hashtable to store invalid entries, making it easier to add new categories in the future.
+
+6. User Interaction:
+   - Simplified the user confirmation process to a single prompt.
+
+7. Logging:
+   - Improved logging by storing entries in memory and writing to file once at the end.
+   - Added more detailed logging throughout the script.
+
+Info: Highlights:
+- uses single-pass approach for scanning and cleaning 
+- reduces the overall execution time
+- improved error handling and logging 
+- syslog like flow capture script operations 

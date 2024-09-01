@@ -1,21 +1,13 @@
 <#
 .SYNOPSIS
-    Performs various registry cleanup operations.
+    Performs various registry cleanup operations with improved efficiency and robustness.
 
 .DESCRIPTION
-    This PowerShell script provides the following functions:
-
+    This PowerShell script provides the following optimized functions:
     1. Log-Message: Logs messages with timestamps and stores them in a JSON log file.
     2. Measure-ExecutionTime: Measures the execution time of a given script block and logs the results.
     3. Backup-Registry: Backs up the registry to a file.
-    4. Scan-InvalidAppPaths: Scans for invalid application paths and returns a list of invalid entries.
-    5. Clean-InvalidAppPaths: Removes invalid application paths.
-    6. Scan-OrphanedComEntries: Scans for orphaned COM/ActiveX entries and returns a list of orphaned entries.
-    7. Clean-OrphanedComEntries: Removes orphaned COM/ActiveX entries.
-    8. Scan-InvalidFileTypes: Scans for invalid file type associations and returns a list of invalid entries.
-    9. Clean-InvalidFileTypes: Removes invalid file type associations.
-    10. Scan-BrokenUninstallEntries: Scans for broken uninstall entries and returns a list of broken entries.
-    11. Clean-BrokenUninstallEntries: Removes broken uninstall entries.
+    4. Scan-and-Clean-Registry: Scans and cleans various registry issues in a single pass.
 
 .PARAMETER LogFilePath
     The path to the log file.
@@ -24,11 +16,11 @@
     The path to the registry backup file.
 
 .EXAMPLE
-    PS> .\RegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'
-    Runs the complete registry cleanup process, including scanning, logging, and cleaning of invalid entries.
+    PS> .\ImprovedRegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'
+    Runs the optimized registry cleanup process, including scanning, logging, and cleaning of invalid entries.
 
 .NOTES
-    Author: Your Name
+    Author: Assistant
     Date: July 3, 2024
 #>
 
@@ -37,31 +29,31 @@ param (
     [string]$RegistryBackupPath = "RegistryBackup.reg"
 )
 
-# Logger function to log messages with timestamps and store in JSON format
+# Import necessary modules
+Import-Module Microsoft.PowerShell.Utility
+
+# Initialize an array to store log entries
+$script:logEntries = @()
+
+# Logger function to log messages with timestamps
 function Log-Message {
     param (
         [string]$message,
         [hashtable]$scanData = $null
     )
 
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logEntry = [ordered]@{
-        Timestamp = $timestamp
+        Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         Message   = $message
         ScanData  = $scanData
     }
+    $script:logEntries += $logEntry
+    Write-Host $message
+}
 
-    try {
-        if (Test-Path $LogFilePath) {
-            $existingLogs = Get-Content -Path $LogFilePath | ConvertFrom-Json
-        } else {
-            $existingLogs = @()
-        }
-        $existingLogs += $logEntry
-        $existingLogs | ConvertTo-Json -Depth 10 | Set-Content -Path $LogFilePath
-    } catch {
-        Write-Host "Error writing to log file: $_"
-    }
+# Function to write log entries to file
+function Write-LogToFile {
+    $script:logEntries | ConvertTo-Json -Depth 10 | Set-Content -Path $LogFilePath
 }
 
 # Timer function to measure execution time
@@ -71,239 +63,122 @@ function Measure-ExecutionTime {
         [string]$FunctionName
     )
 
-    $startTime = Get-Date
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     Log-Message "Starting $FunctionName..."
 
     try {
         & $Code
-    } catch {
+    }
+    catch {
         Log-Message "Error in $FunctionName: $_"
         throw
-    } finally {
-        $endTime = Get-Date
-        $duration = $endTime - $startTime
-        Log-Message "Finished $FunctionName in $($duration.TotalSeconds) seconds."
+    }
+    finally {
+        $stopwatch.Stop()
+        Log-Message "Finished $FunctionName in $($stopwatch.Elapsed.TotalSeconds) seconds."
     }
 }
 
 # Function to backup the registry
 function Backup-Registry {
     param (
-        [string]$RegistryBackupPath = "RegistryBackup.reg"
+        [string]$RegistryBackupPath
     )
 
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $backupPath = Join-Path -Path (Split-Path -Parent -Path $RegistryBackupPath) -ChildPath "RegistryBackup_$timestamp.reg"
+    $backupPath = [System.IO.Path]::ChangeExtension($RegistryBackupPath, "$(Get-Date -Format 'yyyyMMdd-HHmmss').reg")
 
     try {
         reg export HKLM $backupPath /y
-        if ($?) {
+        if ($LASTEXITCODE -eq 0) {
             Log-Message "Registry backup successful: $backupPath"
-        } else {
-            Log-Message "Registry backup failed."
-            throw "Backup failed"
         }
-    } catch {
+        else {
+            throw "Backup failed with exit code $LASTEXITCODE"
+        }
+    }
+    catch {
         Log-Message "Error during registry backup: $_"
         throw
     }
 }
 
-# Function to scan for invalid application paths
-function Scan-InvalidAppPaths {
-    $invalidEntries = @()
-    $appPaths = Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
-    foreach ($appPath in $appPaths) {
-        $exePath = (Get-ItemProperty -Path $appPath.PSPath).'(Default)'
-        if (-not (Test-Path $exePath)) {
-            $invalidEntries += $appPath.PSPath
+# Function to scan and clean various registry issues
+function Scan-and-Clean-Registry {
+    $invalidEntries = @{
+        AppPaths = @()
+        ComEntries = @()
+        FileTypes = @()
+        UninstallEntries = @()
+    }
+
+    # Scan and clean App Paths
+    Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths" | ForEach-Object {
+        $exePath = (Get-ItemProperty -Path $_.PSPath).'(Default)'
+        if ($exePath -and -not (Test-Path $exePath)) {
+            $invalidEntries.AppPaths += $_.PSPath
         }
     }
-    if ($invalidEntries.Count -gt 0) {
-        Log-Message "Found invalid application paths:" -scanData @{ InvalidAppPaths = $invalidEntries }
-    }
-    return $invalidEntries
-}
 
-# Function to clean invalid application paths
-function Clean-InvalidAppPaths {
-    param (
-        [array]$invalidEntries
-    )
-    if ($invalidEntries -and $invalidEntries.Count -gt 0) {
-        foreach ($entry in $invalidEntries) {
-            try {
-                Remove-Item -Path $entry -Force
-                Log-Message "Removed invalid entry: $entry"
-            } catch {
-                Log-Message "Error removing invalid entry: $entry - $_"
-            }
-        }
-    } else {  
-        Log-Message "No invalid application paths to clean."
-    }
-}
-
-# Function to scan for orphaned COM/ActiveX entries
-function Scan-OrphanedComEntries {
-    $orphanedEntries = @()
-    $comKeys = Get-ChildItem -Path "HKCR:\CLSID"
-    foreach ($key in $comKeys) {
-        $inprocServer = (Get-ItemProperty -Path $key.PSPath).InprocServer32
+    # Scan and clean COM/ActiveX entries
+    Get-ChildItem -Path "HKCR:\CLSID" | ForEach-Object {
+        $inprocServer = (Get-ItemProperty -Path $_.PSPath).InprocServer32
         if ($inprocServer -and -not (Test-Path $inprocServer)) {
-            $orphanedEntries += $key.PSPath
+            $invalidEntries.ComEntries += $_.PSPath
         }
     }
-    if ($orphanedEntries.Count -gt 0) {
-        Log-Message "Found orphaned COM/ActiveX entries:" -scanData @{ OrphanedComEntries = $orphanedEntries }
-    }
-    return $orphanedEntries
-}
 
-# Function to clean orphaned COM/ActiveX entries
-function Clean-OrphanedComEntries {
-    param (
-        [array]$orphanedEntries
-    )
-    if ($orphanedEntries -and $orphanedEntries.Count -gt 0) {
-        foreach ($entry in $orphanedEntries) {
-            try {
-                Remove-Item -Path $entry -Force
-                Log-Message "Removed orphaned COM/ActiveX entry: $entry"
-            } catch {
-                Log-Message "Error removing orphaned COM/ActiveX entry: $entry - $_"
-            }
-        }
-    } else {
-        Log-Message "No orphaned COM/ActiveX entries to clean."
-    }
-}
-
-# Function to scan for invalid file type associations
-function Scan-InvalidFileTypes {
-    $invalidFileTypes = @()
-    $fileTypes = Get-ChildItem -Path "HKCR"
-    foreach ($fileType in $fileTypes) {
-        if ($fileType.PSIsContainer) {
-            $default = (Get-ItemProperty -Path $fileType.PSPath).'(Default)'
-            if ($default -and -not (Get-Item -Path "HKCR:\$default" -ErrorAction SilentlyContinue)) {
-                $invalidFileTypes += $fileType.PSPath
-            }
+    # Scan and clean file type associations
+    Get-ChildItem -Path "HKCR" | Where-Object { $_.PSIsContainer } | ForEach-Object {
+        $default = (Get-ItemProperty -Path $_.PSPath).'(Default)'
+        if ($default -and -not (Get-Item -Path "HKCR:\$default" -ErrorAction SilentlyContinue)) {
+            $invalidEntries.FileTypes += $_.PSPath
         }
     }
-    if ($invalidFileTypes.Count -gt 0) {
-        Log-Message "Found invalid file type associations:" -scanData @{ InvalidFileTypes = $invalidFileTypes }
-    }
-    return $invalidFileTypes
-}
 
-# Function to clean invalid file type associations
-function Clean-InvalidFileTypes {
-    param (
-        [array]$invalidFileTypes
-    )
-    if ($invalidFileTypes -and $invalidFileTypes.Count -gt 0) {
-        foreach ($entry in $invalidFileTypes) {
-            try {
-                Remove-Item -Path $entry -Force
-                Log-Message "Removed invalid file type association: $entry"
-            } catch {
-                Log-Message "Error removing invalid file type association: $entry - $_"
-            }
-        }
-    } else {
-        Log-Message "No invalid file type associations to clean."
-    }
-}
-
-# Function to scan for broken uninstall entries
-function Scan-BrokenUninstallEntries {
-    $brokenEntries = @()
-    $uninstallKeys = Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-    foreach ($key in $uninstallKeys) {
-        $uninstallString = (Get-ItemProperty -Path $key.PSPath).UninstallString
+    # Scan and clean uninstall entries
+    Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" | ForEach-Object {
+        $uninstallString = (Get-ItemProperty -Path $_.PSPath).UninstallString
         if ($uninstallString -and -not (Test-Path $uninstallString)) {
-            $brokenEntries += $key.PSPath
+            $invalidEntries.UninstallEntries += $_.PSPath
         }
     }
-    if ($brokenEntries.Count -gt 0) {
-        Log-Message "Found broken uninstall entries:" -scanData @{ BrokenUninstallEntries = $brokenEntries }
-    }
-    return $brokenEntries
-}
 
-# Function to clean broken uninstall entries
-function Clean-BrokenUninstallEntries {
-    param (
-        [array]$brokenEntries
-    )
-    if ($brokenEntries -and $brokenEntries.Count -gt 0) {
-        foreach ($entry in $brokenEntries) {
-            try {
-                Remove-Item -Path $entry -Force
-                Log-Message "Removed broken uninstall entry: $entry"
-            } catch {
-                Log-Message "Error removing broken uninstall entry: $entry - $_"
+    # Log scan results
+    Log-Message "Scan completed. Found invalid entries:" -scanData $invalidEntries
+
+    # Clean invalid entries if user confirms
+    $confirmation = Read-Host "Do you want to clean the found invalid entries? (Y/N)"
+    if ($confirmation -eq 'Y') {
+        $invalidEntries.GetEnumerator() | ForEach-Object {
+            $category = $_.Key
+            $entries = $_.Value
+            $entries | ForEach-Object {
+                try {
+                    Remove-Item -Path $_ -Force -ErrorAction Stop
+                    Log-Message "Removed invalid $category entry: $_"
+                }
+                catch {
+                    Log-Message "Error removing invalid $category entry: $_ - $_"
+                }
             }
         }
-    } else {
-        Log-Message "No broken uninstall entries to clean."
+        Log-Message "Cleaning process completed."
+    }
+    else {
+        Log-Message "Cleaning process aborted by user."
     }
 }
 
 # Main script
-Log-Message "Starting registry scan and clean process..."
+Log-Message "Starting optimized registry scan and clean process..."
 
 # Backup the registry
 Measure-ExecutionTime -Code { Backup-Registry -RegistryBackupPath $RegistryBackupPath } -FunctionName "Backup-Registry"
 
-# Scan for invalid application paths
-$invalidAppPaths = Measure-ExecutionTime -Code { Scan-InvalidAppPaths } -FunctionName "Scan-InvalidAppPaths"
+# Scan and clean registry
+Measure-ExecutionTime -Code { Scan-and-Clean-Registry } -FunctionName "Scan-and-Clean-Registry"
 
-# Scan for orphaned COM/ActiveX entries
-$orphanedComEntries = Measure-ExecutionTime -Code { Scan-OrphanedComEntries } -FunctionName "Scan-OrphanedComEntries"
+# Write logs to file
+Write-LogToFile
 
-# Scan for invalid file type associations
-$invalidFileTypes = Measure-ExecutionTime -Code { Scan-InvalidFileTypes } -FunctionName "Scan-InvalidFileTypes"
-
-# Scan for broken uninstall entries
-$brokenUninstallEntries = Measure-ExecutionTime -Code { Scan-BrokenUninstallEntries } -FunctionName "Scan-BrokenUninstallEntries"
-
-# User confirmation for cleaning
-$confirmation = $null
-$attemptCount = 0
-while ($null -eq $confirmation -and $attemptCount -lt 3) {
-    $userInput = Read-Host "Do you want to clean the found invalid entries? (Y/N)"
-    switch ($userInput.ToUpper()) {
-        'Y' {
-            $confirmation = $true
-        }
-        'N' {
-            $confirmation = $false
-        }
-        default {
-            Log-Message "Invalid input. Please enter 'Y' or 'N'."
-            $attemptCount++
-        }
-    }
-}
-
-if ($confirmation -eq $true) {
-    if ($invalidAppPaths.Count -gt 0) {
-        Measure-ExecutionTime -Code { Clean-InvalidAppPaths -invalidEntries $invalidAppPaths } -FunctionName "Clean-InvalidAppPaths"
-    }
-    if ($orphanedComEntries.Count -gt 0) {
-        Measure-ExecutionTime -Code { Clean-OrphanedComEntries -orphanedEntries $orphanedComEntries } -FunctionName "Clean-OrphanedComEntries"
-    }
-    if ($invalidFileTypes.Count -gt 0) {
-        Measure-ExecutionTime -Code { Clean-InvalidFileTypes -invalidFileTypes $invalidFileTypes } -FunctionName "Clean-InvalidFileTypes"
-    }
-    if ($brokenUninstallEntries.Count -gt 0) {
-        Measure-ExecutionTime -Code { Clean-BrokenUninstallEntries -brokenEntries $brokenUninstallEntries } -FunctionName "Clean-BrokenUninstallEntries"
-    }
-    Log-Message "Cleaning process completed."
-} elseif ($confirmation -eq $false) {
-    Log-Message "Cleaning process aborted by user."
-} else {
-    Log-Message "Cleaning process not executed due to repeated invalid inputs."
-}
+Log-Message "Registry cleanup process completed."
