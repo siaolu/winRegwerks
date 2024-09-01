@@ -36,7 +36,7 @@ This PowerShell script provides an efficient and comprehensive registry cleanup 
 
 ## Usage
 
-To use the script, run the `ImprovedRegistryCleanup.ps1` file in PowerShell with administrator privileges. You can optionally provide the paths for the log file and registry backup file as parameters.
+To use the script, run the `winregux1.ps1` file in PowerShell with administrator privileges. You can optionally provide the paths for the log file and registry backup file as parameters.
 
 ```powershell
 .\ImprovedRegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'

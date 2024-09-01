@@ -16,7 +16,7 @@
     The path to the registry backup file.
 
 .EXAMPLE
-    PS> .\ImprovedRegistryCleanup.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'
+    PS> .\winregux1.ps1 -LogFilePath 'C:\RegistryCleanupLog.json' -RegistryBackupPath 'C:\RegistryBackup.reg'
     Runs the optimized registry cleanup process, including scanning, logging, and cleaning of invalid entries.
 
 .NOTES
